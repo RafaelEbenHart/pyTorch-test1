@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn # nn menyediakan layer - layer dari neural network
 import matplotlib.pyplot as plt
+import numpy as np
+import pathlib as path  # Digunakan untuk menyimpan model
 
 print(torch.__version__)
 
@@ -43,7 +45,7 @@ def plot_predictions(train_data = X_train,
     plt.figure(figsize=(10, 7))
 
     #  plot training data in blue
-    plt.scatter(train_data,train_labels, c="b", s=4, label="training data")
+    plt.scatter(train_data,train_labels, c="b", s=4, label="Training data")
 
     # plot test data in green
     plt.scatter(test_data, test_labels, c="g", s=4, label="Testing data")
@@ -51,7 +53,7 @@ def plot_predictions(train_data = X_train,
     # apakah ada prediksi?
     if predictions is not None:
         # plot predictions jika ada
-        plt.scatter(test_data, predictions, c = "r", s= 4, label="Training results")
+        plt.scatter(test_data, predictions, c = "r", s= 4, label="Predictions")
 
     # menampilkan legend
     plt.legend(prop = {"size": 14})
@@ -112,7 +114,7 @@ plot_predictions(predictions=y_pred)
 # plt.show()
 
 
-## 3. Training
+## 3. Training & Testing
 # membuat model berpindah dari yang random ke data yang sudah ada
 # salah satu cara untuk mengukur seberapa buruk model kita adalah dengan menghitung loss
 # loss function bisa juga disebut cost function
@@ -138,31 +140,96 @@ optimizer = torch.optim.SGD(params = model0.parameters(), lr=0.01) # lr adalah l
 # epoch adalah hyperparameter
 torch.manual_seed(42) # untuk memastikan hasil yang konsisten
 epochs = 200
+
+epochCount = []
+lossValue = []
+testLossValue = []
+## untuk mengecek dan membandingkan model dengan model lainnya
+
 for epoch in range(epochs):
     # buat model menadi mode training
     model0.train()  #train mode membuat semua parameter memerlukan gradien
-
     # 1. foward pass (melibatkan data yang bergerak di model dalam forward function untuk membuat prediction) / foward prop
     y_pred = model0(X_train)
-
     # 2. menghitung loss (membandingkan prediction dengan target)
     loss = loss_fn(y_pred, y_train) # (input, target)
-
     # 3. optimizer zero grad
     optimizer.zero_grad() # menghapus gradien dari iterasi sebelumnya agar memudahkan memulai foward pass yang baru dengan lancar
-
     # 4. loss backward - bergerak mundur melalui jaringan untuk menghitung gradien dari model mempertimbangkan loss (backpropagation)
     loss.backward() # menghitung gradien dari loss terhadap parameter model
-
     # 5. optimizer step - mengupdate parameter model (weight dan bias) berdasarkan gradien yang telah dihitung (gradient descent)
     optimizer.step() # mengupdate parameter model
-    model0.eval()  # eval mode mematikan gradien tracking
 
-print(f"Loss: {loss.item():.5f}")
-rate = 100 - loss.item() * 100
-print(f"Model accuracy: {rate:.2f}%")
-print(model0.state_dict())
+
+    ## Testing
+    model0.eval()  # eval mode mematikan fitur model yang di perlukan untuk evaluasi/testing (dropout layers / batch norm)
+    # 1. membuat forward pass
+    with torch.inference_mode():
+        y_predE200 = model0(X_test)
+    # 2. menghitung loss
+        testLoss = loss_fn(y_predE200, y_test) # menggunakan y test untuk melihat apakah model bisa berkerja dengan data yang tidak diliat sebelumnya
+
+    # print yang telah dikerjakan
+    if epoch % 10 == 0: # print setiap 10 epoch
+        epochCount.append(epoch)
+        lossValue.append(loss.item())
+        testLossValue.append(testLoss.item()) ## untuk mengecek dan membandingkan model dengan model lainnya
+        testPercent = 100 - testLoss.item() * 100
+        lossPercent = 100 - loss.item() * 100
+        print(f"Epoch: {epoch}/{epochs} | Loss accuracy: {lossPercent:.2f}% |  Test accuracy: {testPercent:.2f}% | ") # Loss: {loss} | Test loss: {testLoss} |
+        print(model0.state_dict())
+
+# kegunaan membagi data set bertujuan agar model dapat di evaluasi dengan data yang tidak terlihat sebelumnya
+# dalam hal ini menggunakan y_test
+
+# print(epochCount, lossValue, testLossValue)
+# plot loss curves
+plt.plot(epochCount, np.array(lossValue), label="Training Loss")
+plt.plot(epochCount, testLossValue, label="Testing loss")
+plt.title("Training and Testing loss curves")
+plt.ylabel("Loss")
+plt.xlabel("epoch")
+plt.legend()
+# plt.show()
+
+## Saving
+# method to save the model
+# 1. torch.save() - menyimpan object pytorch dalam pickle format
+# 2. torch.load() - membuat object pytorch dari pickle format
+# 3. torch.nn.Module.load_state_dict() - memuat state dict ke dalam model
+# 4. torch.nn.Module.save_state_dict() - menyimpan state dict dari model
+
+# 1. membuat model directory
+MODEL_PATH = path.Path("models")
+MODEL_PATH.mkdir(parents=True, exist_ok=True)
+
+# 2. membuat model save path
+MODEL_NAME = "LINEAR_REGRESSION_MODEL0.pth"
+MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
+
+print(MODEL_SAVE_PATH)
+
+# 3. menyimpan model state dict
+print(f"Saving model state dict to: {MODEL_SAVE_PATH}")
+torch.save(obj=model0.state_dict(), f=MODEL_SAVE_PATH)
+print(model0.state_dict()) # untuk mengecek apakah model sudah di simpan dengan benar
+
+
+## Loading
+loadedModel0 = LinearRegression()
+
+# 1. Load the saved state_dict of model0
+loadedModel0.load_state_dict(torch.load(f=MODEL_SAVE_PATH))
+print(loadedModel0.state_dict())  # untuk mengecek apakah model sudah di load dengan benar
+
+# 2. membuat prediksi dengan model yang sudah di load
+loadedModel0.eval()  # pastikan model dalam mode evaluasi
 with torch.inference_mode():
-    y_predE200 = model0(X_test)
-plot_predictions(predictions=y_predE200)
-plt.show()
+    loadedModel0_pred = loadedModel0(X_test)
+print(loadedModel0_pred)
+
+# 3. bandingkan prediksi dengan prediksi model sebelum di load
+model0.eval()
+with torch.inference_mode():
+    y_pred = model0(X_test)
+print(y_pred == loadedModel0_pred)
