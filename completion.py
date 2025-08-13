@@ -2,6 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
+import pathlib as path
 
 # membuat agnostic code
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -12,8 +13,8 @@ weight = 1
 bias = 0.5
 
 start = 0
-end = 5.0
-step = 1.0
+end = 2.2
+step = 0.2
 X = torch.arange(start, end, step).unsqueeze(dim = 1).to(device)
 # print(X)
 y = weight * X + bias
@@ -55,6 +56,7 @@ class naik(nn.Module):
 
 torch.manual_seed(20)
 model = naik().to(device)
+print(next(model.parameters()).device) # mengecek model di device mana
 # print(list(model.parameters()))
 print(model.state_dict())
 
@@ -102,7 +104,7 @@ for epoch in range(epochs):
 with torch.inference_mode():
     yPred = model(XTest)
 plotPredictions(predictions = yPred.cpu().numpy())
-plt.show()
+
 
 plt.plot(epochCount, [i.cpu().detach().numpy() for i in lossValue] ,label = "Training loss") # jika tipe data list maka buat [i.cpu().numpy() for i in target]
 plt.plot(epochCount, [i.cpu().detach().numpy() for i in testLossValue], label = "Testing loss")
@@ -110,4 +112,37 @@ plt.title("Training and Testing curve")
 plt.ylabel("Loss")
 plt.xlabel("epoch")
 plt.legend()
-plt.show()
+# plt.show()
+
+## 5. Saving Model
+
+# membuat model directory
+MODEL_PATH = path.Path("models")
+MODEL_PATH.mkdir(parents=True, exist_ok=True)
+
+# membuat save model path
+MODEL_NAME = "LINEAR_REGRESSION_MODEL1.pth"
+MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
+
+# save model
+torch.save(obj=model.state_dict(), f=MODEL_SAVE_PATH)
+
+
+## 6. laod model
+loadedModel = naik().to(device)
+
+# Load the saved state_dict of model0
+loadedModel.load_state_dict(torch.load(f=MODEL_SAVE_PATH))
+print(loadedModel.state_dict())  # untuk mengecek apakah model sudah di load dengan benar
+
+# membuat prediksi dengan model yang sudah di load
+loadedModel.eval()
+with torch.inference_mode():
+    loadedModel_pred = loadedModel(XTest)
+print(loadedModel_pred)
+
+# bandingkan prediksi dengan prediksi model sebelum di load
+model.eval()
+with torch.inference_mode():
+    y_pred = model(XTest)
+print(y_pred == loadedModel_pred.to(device))
